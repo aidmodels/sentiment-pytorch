@@ -4,5 +4,9 @@
 // https://opensource.org/licenses/MIT
 
 [[models]]
-name = "sentiment"
-url = "https://github.com/aidmodels/sentiment-analysis/releases/download/v0.1/model.h5"
+name = "cnn-pt"
+url = "https://github.com/aidmodels/sentiment-pytorch/releases/download/v0.0.1/imdb-model-cnn.pt"
+
+[[models]]
+name = "glove-6b-300d"
+url = "https://github.com/aidmodels/sentiment-pytorch/releases/download/v0.0.1/glove.6B.100d.txt"

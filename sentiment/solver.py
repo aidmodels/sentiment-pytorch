@@ -3,16 +3,17 @@
 # This software is released under the MIT License.
 # https://opensource.org/licenses/MIT
 
-import spacy
 from mlpm.solver import Solver
 
+import spacy
 import torch
+from torch.functional import split
 import torchtext
-import torchtext.data
+from torchtext.legacy import data
 import torch.nn as nn
 import torch.nn.functional as F
-from torchtext.vocab import Vocab
 
+MIN_LEN=7
 
 class CNN(nn.Module):
     def __init__(self, vocab_size, embedding_dim, n_filters, filter_sizes, output_dim, dropout, pad_idx):
@@ -41,15 +42,30 @@ class CNN(nn.Module):
 class SentimentSolver(Solver):
     def __init__(self, toml_file=None):
         super().__init__(toml_file)
-        device = torch.device("cuda:5" if torch.cuda.is_available() else "cpu")
-        model = torch.load('pretrained/imdb-model-cnn.pt')
-        model.eval()
-        model = model.to(device)
+        spacy.cli.download("en_core_web_sm")
+        self.nlp = spacy.load("en_core_web_sm")
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.model = torch.load('pretrained/imdb-model-cnn.pt')
+        loaded_vectors = torchtext.vocab.Vectors('pretrained/glove.6B.100d.txt')
+        self.TEXT = data.Field(lower=True, tokenize='spacy')
+        self.Label = data.LabelField(dtype = torch.float)
+        train = torchtext.datasets.IMDB(split="train")
+        self.TEXT.build_vocab(train, vectors=loaded_vectors, max_size=len(loaded_vectors.stoi))
+        self.TEXT.vocab.set_vectors(stoi=loaded_vectors.stoi, vectors=loaded_vectors.vectors, dim=loaded_vectors.dim)
+        self.Label.build_vocab(train)
+        self.model.eval()
+        self.model = self.model.to(self.device)
 
+    def forward_with_sigmoid(self, input):
+        return torch.sigmoid(self.model(input))
 
     def infer(self, data):
-        # if you need to get file uploaded, get the path from input_file_path in data
-        sequences = self.loaded_tokenizer.texts_to_sequences([data['text']])
-        padding = pad_sequences(sequences, maxlen=MAX_LEN)
-        result = self.model.predict(padding, batch_size=1, verbose=1)
-        return {"output": result.tolist()}  # return a dict
+        text = [tok.text for tok in self.nlp.tokenizer(data['text'].lower())]
+        if len(text) < MIN_LEN:
+                text += ['pad'] * (MIN_LEN - len(text))
+        indexed = [self.TEXT.vocab.stoi[t] for t in text]
+        self.model.zero_grad()
+        input_indices = torch.tensor(indexed, device=self.device)
+        input_indices = input_indices.unsqueeze(0)
+        pred = self.forward_with_sigmoid(input_indices).item()
+        return {"output": pred}

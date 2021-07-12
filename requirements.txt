@@ -2,3 +2,5 @@ spacy
 torch
 torchtext
 mlpm
+.data/
+.vector_cache
